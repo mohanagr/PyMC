@@ -1,130 +1,165 @@
 import numpy as np
-import chisquare
+import os
+from . import chisquare
+
 class mcmc():
 
 	def __init__(self, steps, y_data, y_err, target_func, infile, outfile):
 
 		self.max_steps = steps
-		self.n_params = n_params
-		self.ranges = params_range
 		self.data = y_data
 		self.data_err = y_err
 		self.infile = infile
 		self.outfile = outfile
 
+		self.func = target_func
+
 		# Keeping track of parameters with priors
-		self.gaussian = list()
+		self.gaussian = dict()
 		self.uniform = list()
 
 		# Set initial parameters
 		self._init_params()
-
-		
-		# Set initial variance for proposal steps
-		self.variance = (2.3/(float(n_params))**0.5)*np.ones(n_params)
 
 		# Set up counters
 		self.acc = 0
 		self.rej = 0	
 		self.weight = 0
 
-	def _read():
+	def _read(self):
 
 		# Read input file containing parameter bounds
-		with open(infile, 'r') as f:
+		with open(self.infile, 'r') as f:
 			lines = f.readlines()
 
 		self.n_params = len(lines)
 
-		ranges = np.zeros((n_params, 2))
+		print("No. of params are ", self.n_params)
+
+		self.param_ranges = np.zeros((self.n_params, 2))
 
 		for i, line in enumerate(lines):
 			values = [float(val) for val in line.split()]
-			ranges[i,:] = values[0:2]
+			self.param_ranges[i,:] = values[0:2]
 			flag = int(values[2])
 
 			if(flag == 1):
-				self.gauss_params = values[3:5]
-				self.gaussian.append(i)
+				self.gaussian[i] = values[3:5]
 			elif(flag == 2):
 				self.uniform.append(i)
+		print("SELF GAUSSIAN", self.gaussian)
+		print("PARAM RANGES", self.param_ranges)
 
-	def _propose():
+	def _propose(self):
 
 		means = self.params
-		var = np.diag(self.variance)
+		var = self.variance
 
-		# OMEGAbh^2 from BBN
-		means[0] = 0.022
-		var[0] = 0.002
+		for i in self.gaussian.keys():
+			means[i] = self.gaussian[i][0]
+			var[i] = self.gaussian[i][1] 
 
-		# OMEGAm from BAO
-		means[1] = 0.303
-		var[1] = 0.040
+		print("MEANS", means)
+		print("VARIANCES", var)
+		flag = 1
+		step = np.zeros(4)
+		# while(flag>0):
+			# flag = 0
+			# print("in while loop", step)
+		for i in range(0, self.n_params):
+			step[i] = np.random.normal(means[i], var[i])
+			low = self.param_ranges[i, 0]
+			high = self.param_ranges[i, 1]
+				# print("low", low, "high", high)
+				# if((low-step[i]>1.0E-8)  or (step[i]-high > 1.0E-08)):
+					# flag = 1
+			# print(flag)
 
-		step = np.random.multivariate_normal(means, var , 1)
+		self.proposal = step
 
-		self.propsal = step
+	def _init_params(self):
 
-	def _init_params():
+		self._read()
 
-			self.params = np.ones(self.n_params)
+		# Set initial variance for proposal steps
+		self.variance = 0.01*(2.3/(float(self.n_params))**0.5)*np.ones(self.n_params)
 
-			for i, param in enumerate(self.params):
+		self.params = np.ones(self.n_params)
 
-				if(i in self.gaussian):
-					self.params[i] = np.random.normal(self.gauss_params[0], self.gauss_params[1])
+		for i, param in enumerate(self.params):
 
-				self.params[i] = np.random.uniform(low = self.params_range[i,0], high = self.params_range[i, 1])
+			if(i in self.gaussian.keys()):
+				self.params[i] = np.random.normal(self.gaussian[i][0], self.gaussian[i][1])
+			else:
+				self.params[i] = np.random.uniform(low = self.param_ranges[i, 0], high = self.param_ranges[i, 1])
 
-			# Calculate initial CHISQUARE statistic
-			self.chi2 = chisquare.chi2(self.data, y_calc1, self.data_err)
+		print("After init", self.params)
 
-	def _run_chain():
+			
 
+	def _run_chain(self):
+
+		print("PARAMS AT BEGINNING OF RUN CHAIN", self.params)
+		# Calculate initial CHISQUARE statistic
 		y_calc1 = self.func(self.params)
-		y_calc2 = self.func(self.propsal)
+		print(y_calc1)
+		self.chi2 = chisquare.chi2(self.data, y_calc1, self.data_err)
+		print("chi2 originnal: ", self.chi2)
+
+		self._propose()	
+
+		# print("from run chain", self.proposal)
+		y_calc2 = self.func(self.proposal)
 
 		chi2_new = chisquare.chi2(self.data, y_calc2, self.data_err)
-
+		print("chi2 new: ", chi2_new)
 		if(chi2_new < self.chi2):
 			self.acc += 1
-			retstr = [1.0, chi2_new/2.0, self.proposal]
+			retstr = [1, chi2_new/2.0, self.proposal]
 			self.params = self.proposal
 			self.chi2 = chi2_new
 			self.weight = 0
+			print("AC NEW PARAM", self.params)
 		else:
 			toss = np.random.uniform()
-			alpha = np.exp((-chi2_new + chi2/2.0))
+			alpha = np.exp((-chi2_new + self.chi2)/2.0)
 
 			if(toss < alpha):
 				self.acc += 1
-				retstr = [1.0, chi2_new/2.0, self.proposal]
+				retstr = [1, chi2_new/2.0, self.proposal]
 				self.params = self.proposal
 				self.chi2 = chi2_new
 				self.weight = 0
+				print("AC NEW PARAM", self.params)
 			else:
+				self.weight += 1
+				self.params = self.params
 				retstr = [self.weight, self.chi2/2.0, self.params]
 				self.rej += 1
-				self.weight += 1	
-
+				print("REJ")
+					
+		print("RETSTR", retstr)
 		return retstr
 
-	def generate(self, filename = self.outfile):
+	def generate(self, filename = None):
 
 		if(not os.path.exists("./Output/")):
-			os.makedirs("./Output/" + filename)
+			os.makedirs("./Output/")
 
-		with open("./Output/"+filename, 'w') as f:
+		if(filename is not None):
+			self.outfile = filename
+
+		with open("./Output/"+self.outfile, 'w') as f:
 
 			for i in range(0, self.max_steps):
 
 				label, likelihood, params = self._run_chain()
-				filestr = '{0:10.7f}{1:10.7f}'.format(label, likelihood)
+				print("LABEL IS", label)
+				filestr = '{0:3.1f} {1:10.7f}'.format(float(label), likelihood)
 				for param in params:
 					filestr = filestr + '{:10.7f}'.format(param)
-
-				f.write(filestr)
+				# print("FILESTR IS", filestr)
+				f.write(filestr+'\n')
 
 
 

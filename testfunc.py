@@ -1,7 +1,8 @@
 import numpy as np
-from scipy.special import integrate
+import scipy.integrate as integrate
 
 def func(params):
+	# 	print("From testfunc func", params)
 	ohmbh2, ohmm, h, n = params
 
 	#----------------------------------------------------------
@@ -33,7 +34,9 @@ def func(params):
 	#---------------------------------------------------------
 	la = np.pi * d_ls[0] / (rs * H0)
 
-	phi, del2, del3 = getShiftParams(0, ohmbh2, n)
+	print(la)
+
+	phi, del2, del3 = getShiftParams(0, ohmbh2, ohmmh2, n)
 
 	y_th = np.zeros(3)
 
@@ -43,7 +46,9 @@ def func(params):
 
 	return y_th
 
-def getShiftParams(ohm_ls, ohmbh2, n):
+def getShiftParams(ohm_ls, ohmbh2, ohmmh2, n):
+
+	r_ = 0.042*(1100)/(ohmmh2*1000)
 
 	a1 = 0.286 + 0.626*ohmbh2
 	a2 = 0.1786 - 6.308*ohmbh2 + 174.9*ohmbh2**2 - 1168*ohmbh2**3

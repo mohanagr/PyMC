@@ -1,14 +1,16 @@
 import numpy as np
 import configparser
+from testfunc import func
+from libmc.markov import mcmc
 
 # Add a separate function to read ini file if it gets too complicated
 
-def get_input(datafile)
+def get_input(datafile):
 
 	# Data reading
 
 	with open(datafile) as f:
-	lines = f.readlines()
+		lines = f.readlines()
 
 	size = len(lines)
 	lval = np.zeros((size, 2))
@@ -42,17 +44,16 @@ def main():
 
 	n_params = config['PARAMS'].getint('number')
 
-	ranges = np.zeros((n_params, 2))
-
-	# Read input file containing parameter bounds
-	with open(infile, 'r') as f:
-		lines = f.redlines()
-
-	for i, line in enumerate(lines):
-		ranges[i,:] = [float(val) for val in line.split()]
-
 	# Get experimental data and error
-	y_data, y_err = get_input()
+	y_data, y_err = get_input(datafile)
 
 	# Initiate chain
-	chain1 = mcmc(steps, y_data, y_err)
+	chain1 = mcmc(steps, y_data, y_err, func, infile, outfile)
+
+	chain1.generate()
+
+
+if __name__ == '__main__':
+
+	main()
+
