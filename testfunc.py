@@ -34,7 +34,7 @@ def func(params):
 	#---------------------------------------------------------
 	la = np.pi * d_ls[0] / (rs * H0)
 
-	print(la)
+	# print(la)
 
 	phi, del2, del3 = getShiftParams(0, ohmbh2, ohmmh2, n)
 
