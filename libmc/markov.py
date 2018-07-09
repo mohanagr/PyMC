@@ -17,6 +17,7 @@ class mcmc():
 		# Keeping track of parameters with priors
 		self.gaussian = dict()
 		self.uniform = list()
+		self._notgauss = list()
 
 		# Set initial parameters
 		self._init_params()
@@ -83,7 +84,7 @@ class mcmc():
 		self._read()
 
 		# Set initial variance for proposal steps
-		self.variance = 0.01*(2.3/(float(self.n_params))**0.5)*np.ones(self.n_params)
+		self.variance = (2.3/(float(self.n_params))**0.5)*np.ones(self.n_params)
 
 		self.params = np.zeros(self.n_params)
 
@@ -92,10 +93,30 @@ class mcmc():
 			if(i in self.gaussian.keys()):
 				self.params[i] = np.random.normal(self.gaussian[i][0], self.gaussian[i][1])
 			else:
+				self._notgauss.append(i)
 				self.params[i] = np.random.uniform(low = self.param_ranges[i, 0], high = self.param_ranges[i, 1])
 
 		print("After initialization", self.params)
 
+	def _adjust_sigma(self):
+
+		ratio = self.rej/(self.rej + self.acc)
+
+		# Too many rejections. (reduce step size, be less risky)
+		if(ratio > 0.8):
+
+			for i in range(0, self.n_params):
+				if (i in self._notgauss):
+					self.variance[i] = self.variance[i]*0.8
+		
+		# Too many accepted. (Inc step size, be more risky)
+		elif(ratio < 0.4):
+
+			for i in range(0, self.n_params):
+				if (i in self._notgauss):
+					self.variance[i] = self.variance[i]*1.2
+
+		# print(self.variance)
 			
 	def run_chain(self, fileobj):
 
@@ -147,6 +168,12 @@ class mcmc():
 
 			fileobj.write(line)
 
+			if(i%100 == 0):
+				self._adjust_sigma()
+
+		print("Total accepted : ", self.acc)
+		print("Total rejected : ", self.rej)
+
 
 	def generate(self, filename = None):
 
@@ -158,7 +185,3 @@ class mcmc():
 
 		with open("./Output/"+self.outfile, 'w') as f:
 			self.run_chain(f)
-
-
-
-
