@@ -14,12 +14,10 @@ class mcmc():
 
 		self.func = target_func
 
+
 		# Keeping track of parameters with priors
 		self.gaussian = dict()
 		self.uniform = list()
-
-		# Set initial parameters
-		self._init_params()
 
 		# Set up counters
 		self.acc = 0
@@ -50,14 +48,14 @@ class mcmc():
 		print("SELF GAUSSIAN", self.gaussian)
 		print("PARAM RANGES", self.param_ranges)
 
-	def _propose(self):
+	def _propose(self, p):
 
-		means = self.params
+		means = p.copy()
 		var = self.variance
 
 		for i in self.gaussian.keys():
-			means[i] = self.gaussian[i][0]
-			var[i] = self.gaussian[i][1] 
+			means[i] = float(self.gaussian[i][0])
+			var[i] = float(self.gaussian[i][1]) 
 
 		print("MEANS", means)
 		print("VARIANCES", var)
@@ -75,7 +73,7 @@ class mcmc():
 					# flag = 1
 			# print(flag)
 
-		self.proposal = step
+		return step
 
 	def _init_params(self):
 
@@ -84,62 +82,65 @@ class mcmc():
 		# Set initial variance for proposal steps
 		self.variance = 0.01*(2.3/(float(self.n_params))**0.5)*np.ones(self.n_params)
 
-		self.params = np.ones(self.n_params)
+		self.initparams = np.zeros(self.n_params)
 
-		for i, param in enumerate(self.params):
+		for i, param in enumerate(self.initparams):
 
 			if(i in self.gaussian.keys()):
-				self.params[i] = np.random.normal(self.gaussian[i][0], self.gaussian[i][1])
+				self.initparams[i] = np.random.normal(self.gaussian[i][0], self.gaussian[i][1])
 			else:
-				self.params[i] = np.random.uniform(low = self.param_ranges[i, 0], high = self.param_ranges[i, 1])
+				self.initparams[i] = np.random.uniform(low = self.param_ranges[i, 0], high = self.param_ranges[i, 1])
 
-		print("After init", self.params)
+		print("After init", self.initparams)
 
 			
 
-	def _run_chain(self):
+	def run_chain(self):
 
-		print("PARAMS AT BEGINNING OF RUN CHAIN", self.params)
-		# Calculate initial CHISQUARE statistic
-		y_calc1 = self.func(self.params)
-		print(y_calc1)
-		self.chi2 = chisquare.chi2(self.data, y_calc1, self.data_err)
-		print("chi2 originnal: ", self.chi2)
+		p = self.initparams.copy()
 
-		self._propose()	
+		for i in range(0, self.max_steps):
 
-		# print("from run chain", self.proposal)
-		y_calc2 = self.func(self.proposal)
+			print("PARAMS AT BEGINNING OF RUN CHAIN", p)
+			# Calculate initial CHISQUARE statistic
+			y_calc1 = self.func(p)
+			self.chi2 = chisquare.chi2(self.data, y_calc1, self.data_err)
+			print("chi2 originnal: ", self.chi2)
 
-		chi2_new = chisquare.chi2(self.data, y_calc2, self.data_err)
-		print("chi2 new: ", chi2_new)
-		if(chi2_new < self.chi2):
-			self.acc += 1
-			retstr = [1, chi2_new/2.0, self.proposal]
-			self.params = self.proposal
-			self.chi2 = chi2_new
-			self.weight = 0
-			print("AC NEW PARAM", self.params)
-		else:
-			toss = np.random.uniform()
-			alpha = np.exp((-chi2_new + self.chi2)/2.0)
+			# print("from run chain", self.proposal)
+			step = self._propose(p)
+			y_calc2 = self.func(step)
 
-			if(toss < alpha):
+			chi2_new = chisquare.chi2(self.data, y_calc2, self.data_err)
+			print("chi2 new: ", chi2_new)
+
+			flag = 0
+			cmp = (self.chi2 - chi2_new)
+
+			if( cmp > 1.0E-08):
 				self.acc += 1
-				retstr = [1, chi2_new/2.0, self.proposal]
-				self.params = self.proposal
+				retstr = [1, chi2_new/2.0, step]
+				p = step.copy()
 				self.chi2 = chi2_new
 				self.weight = 0
-				print("AC NEW PARAM", self.params)
-			else:
-				self.weight += 1
-				self.params = self.params
-				retstr = [self.weight, self.chi2/2.0, self.params]
-				self.rej += 1
-				print("REJ")
-					
-		print("RETSTR", retstr)
-		return retstr
+				print("AC NEW PARAM", p)
+			elif(-cmp > 1.0E-08):
+				toss = np.random.uniform()
+				alpha = np.exp((-chi2_new + self.chi2)/2.0)
+
+				if((alpha - toss) > 1.0E-08):
+					self.acc += 1
+					retstr = [1, chi2_new/2.0, step]
+					self.chi2 = chi2_new
+					self.weight = 0
+					p = step.copy()
+					print("AC NEW PARAM from TOSS", p)
+				else:
+					print("FROM REJECT", p, step)
+					self.weight += 1
+					retstr = [self.weight, self.chi2/2.0, p]
+					self.rej += 1
+					print("REJ")
 
 	def generate(self, filename = None):
 
@@ -149,17 +150,11 @@ class mcmc():
 		if(filename is not None):
 			self.outfile = filename
 
-		with open("./Output/"+self.outfile, 'w') as f:
+		# Set initial parameters
+		self._init_params()
 
-			for i in range(0, self.max_steps):
-
-				label, likelihood, params = self._run_chain()
-				print("LABEL IS", label)
-				filestr = '{0:3.1f} {1:10.7f}'.format(float(label), likelihood)
-				for param in params:
-					filestr = filestr + '{:10.7f}'.format(param)
-				# print("FILESTR IS", filestr)
-				f.write(filestr+'\n')
+		# with open("./Output/"+self.outfile, 'w') as f:
+		self.run_chain()
 
 
 
